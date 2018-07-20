@@ -1,0 +1,7 @@
+
+-0.00025 works good with weigthed cross
+-0.0000025 works for dice but 0.00025 is too high
+-dice loss seems to be just trending towards all black , lower LR just goes slower
+-at 60k cross entropy LR reduced from 0.00025 to 0.0000025
+-started training saturday again with LR of 0.000025 and weights set to [2,1] to try to increase the differentiation
+-based on logs the convergence occured somewhere between 224k and 280k
