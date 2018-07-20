@@ -226,14 +226,13 @@ class process:
         # check if loss is list or method
         if type(self.loss) == list:
             for method in self.loss:
-                assert str(type(method)) == "<class 'method'>", "LIST CONTAINED NON METHODS, MUST PASS LIST OF METHODS"
+                assert str(type(method)) == "<class 'method'>" or str(type(self.loss)) == "<class 'function'>", "LIST CONTAINED NON METHODS, MUST PASS LIST OF METHODS"
             self.loss_schedule_flag = 1
 
 
-        elif str(type(self.loss)) == "<class 'method'>":
+        elif str(type(self.loss)) == "<class 'method'>" or str(type(self.loss)) == "<class 'function'>" :
             self.loss_schedule_flag = 0
 
-        assert self.loss_schedule_flag in [0, 1], "LOSS MUST BE METHOD OR LIST OF METHODS"
 
 
         if self.loss_schedule_flag == 1:
