@@ -5,3 +5,22 @@
 -at 60k cross entropy LR reduced from 0.00025 to 0.0000025
 -started training saturday again with LR of 0.000025 and weights set to [2,1] to try to increase the differentiation
 -based on logs the convergence occured somewhere between 224k and 280k
+-begin using cluster to perform tasks
+-qsub -I -l nodes=1:ppn=1:gpus=1 -q comm_gpu
+-module load singularity
+-launched singularit interactive with singularity shell /shared/software/containers/Keras-2.1.4_TensorFlow-1.5.0.simg
+-module is bad they are fixing it
+-Large prediciton methodology:
+    1) overlap should be at least .75
+    2) all volumes should be cropped 50:-50 on all three axis to avoid irregularitees on edges causing false merges
+    3) threshold should be 0.01
+-Something was weird with file 0001 in VCN so it was deleted
+-Right now I can not get the VCN bin 2 into the file type I need it to be in because it is so large, the tiffs are as 8 bits and numpy as min float16 so the size of that file would be ~700gb
+meaning without 700gb of ram I can not even create the numpy file
+-430,000 is go to model
+
+
+
+##################################
+#INPUT RAW MUST BE IN RANGE [0,1]#
+##################################

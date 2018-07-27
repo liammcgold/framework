@@ -3,8 +3,6 @@ import numpy as np
 
 class provider():
 
-
-
     def __init__(self,raw,aff,gt,shape):
         self.raw=raw
         self.aff=aff
@@ -22,8 +20,6 @@ class provider():
         self.gt_rotations[0]=np.asarray(gt,dtype=object)
 
         self.raw_rotations[1:],self.aff_rotations[1:],self.gt_rotations[1:]=self.create_rotations()
-
-
 
     def number_of_rotations(self):
         n=0
@@ -129,7 +125,6 @@ class provider():
         self.rotate()
 
         return self.raw[x:x + self.shape[0], y:y + self.shape[1], z:z + self.shape[2]]
-
 
     def rotate(self):
         num=int(np.random.random()*self.num_rots)

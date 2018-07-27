@@ -21,7 +21,6 @@ def path_join(input_1,input_2,filters):
 
     return s2
 
-
 def large_kernel_make(verbose=0):
 
     raw_input=k.layers.Input((16,128,128,1))
@@ -79,7 +78,6 @@ def large_kernel_make(verbose=0):
     #k.utils.plot_model(model,"model_LK.png",show_shapes=True)
 
     return model
-
 
 def merged_u_net_make(verbose=0):
 
@@ -236,7 +234,6 @@ def merged_u_net_make(verbose=0):
     #k.utils.plot_model(model, "model_MG.png", show_shapes=True)
 
     return model
-
 
 def heavy_merged_u_net_make(verbose=0):
 
@@ -516,7 +513,6 @@ def heavy_merged_u_net_make(verbose=0):
 
     return model
 
-
 def small_kernel_u_net_make(verbose=0):
 
     raw_input=k.layers.Input((16,128,128,1))
@@ -611,9 +607,8 @@ def small_kernel_u_net_make(verbose=0):
 
     out=k.layers.LeakyReLU()(mc2m)
 
-    out=k.layers.BatchNormalization()(out)
 
-
+    out = k.layers.Conv3D(3, (sks, sks, sks), padding="same", activation="sigmoid")(out)
 
     model=k.models.Model(inputs=raw_input,outputs=out)
 
@@ -623,7 +618,6 @@ def small_kernel_u_net_make(verbose=0):
     #k.utils.plot_model(model, "model_SK.png", show_shapes=True)
 
     return model
-
 
 def autoencoder(input_shape,compression_factor,kernel_size=3,features=4):
 

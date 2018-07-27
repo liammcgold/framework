@@ -385,10 +385,10 @@ class process:
                                np.asarray(gradients,dtype=np.float32)[0,0,j,:,:,2])
 
 
+
     def save_model(self):
         print("Saving model...")
         self.model.save(self.save_loc + "model%i" % self.iteration)
-
 
     def __get_loss(self):
 

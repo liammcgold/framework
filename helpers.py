@@ -9,15 +9,23 @@ import os
 import math
 import tensorflow
 import malis
-
+import filter
+import keras as k
+import models
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 raw = np.load("data/spir_raw.npy")
 gt = np.load("data/spir_gt.npy")
 aff = np.load("data/spir_aff.npy")
 
-gpus=input("how many GPUS")
+gpus=1#input("how many GPUS")
 
+
+best_model="malis_heavy_net/model420000"
+
+best_model_type="heavy paralell UNET"
+
+best_model_func=models.heavy_merged_u_net_make
 
 def assemble_block_with_model_location(model_funct, model_file, raw_vol, overlap, blend_fac):
 
@@ -155,10 +163,13 @@ def predict_and_watershed_on_vol_with_gt_conf_and_save_tiffs_single_thresh(model
         tif.imsave("predictions_tiffs/aff_graph1/1aff%i.tiff" % i, np.asarray(aff[1, i], dtype=np.float32))
         tif.imsave("predictions_tiffs/aff_graph2/2aff%i.tiff" % i, np.asarray(aff[2, i], dtype=np.float32))
 
-def watershed_on_vol_with_gt_conf_and_save_tiffs_single_thresh(aff,gt_vol,thresh,thresh_high=0.9999,thresh_low=0.0001):
+def watershed_on_vol_with_gt_conf_and_save_tiffs_single_thresh(aff_vol,gt_vol,thresh,thresh_high=0.9999,thresh_low=0.0001):
 
 
-    seg=__watershed_return_metrics_single(aff,gt_vol,thresh,metric="both",no_metric_flag=1,thresh_high=thresh_high,thresh_low=thresh_low)
+    seg=__watershed_return_metrics_single(aff_vol,gt_vol,thresh,metric="both",no_metric_flag=1,thresh_high=thresh_high,thresh_low=thresh_low)
+
+    seg=filter.top_n(seg,2000)
+
 
     for i in range(0, np.shape(seg)[0]):
         tif.imsave("predictions_tiffs/pred/pred%i.tiff" % i, np.asarray(seg[i], dtype=np.float32))  # ,photometric='rgb')
@@ -166,6 +177,33 @@ def watershed_on_vol_with_gt_conf_and_save_tiffs_single_thresh(aff,gt_vol,thresh
         tif.imsave("predictions_tiffs/aff_graph0/0aff%i.tiff" % i, np.asarray(aff[0, i], dtype=np.float32))
         tif.imsave("predictions_tiffs/aff_graph1/1aff%i.tiff" % i, np.asarray(aff[1, i], dtype=np.float32))
         tif.imsave("predictions_tiffs/aff_graph2/2aff%i.tiff" % i, np.asarray(aff[2, i], dtype=np.float32))
+    return seg
+
+def watershed_on_vol_and_save_tiffs_single_thresh(aff_vol,gt_vol,thresh,thresh_high=0.9999,thresh_low=0.0001):
+
+
+    seg=watershed(aff_vol,thresh=thresh,thresh_high=thresh_high,thresh_low=thresh_low)
+
+
+    for i in range(0, np.shape(seg)[0]):
+        tif.imsave("predictions_tiffs/pred/pred%i.tiff" % i, np.asarray(seg[i], dtype=np.float32))  # ,photometric='rgb')
+        tif.imsave("predictions_tiffs/gt/gt%i.tiff" % i, np.asarray(gt_vol[i], dtype=np.float32))
+        tif.imsave("predictions_tiffs/aff_graph0/0aff%i.tiff" % i, np.asarray(aff[0, i], dtype=np.float32))
+        tif.imsave("predictions_tiffs/aff_graph1/1aff%i.tiff" % i, np.asarray(aff[1, i], dtype=np.float32))
+        tif.imsave("predictions_tiffs/aff_graph2/2aff%i.tiff" % i, np.asarray(aff[2, i], dtype=np.float32))
+    return seg
+
+def watershed(aff_vol,thresh=0.1,thresh_high=0.9999,thresh_low=0.0001):
+
+
+    aff_vol = np.ascontiguousarray(aff_vol, dtype=np.float32)
+
+    seg = waterz.agglomerate(aff_vol, thresholds=[thresh],aff_threshold_high=thresh_high,aff_threshold_low=thresh_low,discretize_queue=10)
+
+    for segmentation in seg:
+        seg=segmentation
+
+    return seg
 
 def __watershed_return_metrics_single(aff_vol, gt_vol, thresh, metric="both",no_metric_flag=0,thresh_high=0.9999,thresh_low=0.0001):
 
@@ -410,7 +448,7 @@ def update_LR(process):
 
     print("\n\tLoss still unstable.\n")
 
-def train_from_scratch(saving_loc,loss=None,initial_lr=0.0025,gpus=1):
+def train_from_scratch(saving_loc,loss=None,initial_lr=0.0025,gpus=1,model_type="heavy paralell UNET",image_interval=10,check_interval=100,validation_interval=200):
 
     if loss==None:
         l = custom_loss.loss()
@@ -435,16 +473,17 @@ def train_from_scratch(saving_loc,loss=None,initial_lr=0.0025,gpus=1):
                            raw,
                            gt,
                            aff,
-                           model_type="heavy paralell UNET",
+                           model_type=model_type,
                            precision="half",
                            save_loc=saving_loc,
                            saving_sched=[[0, 100], [1000, 10000], [100000, 20000]],
                            image_loc="tiffs/",
-                           check_interval=100,
+                           image_interval=image_interval,
+                           check_interval=check_interval,
                            conf_coordinates=[[200, 216], [200, 328], [200, 328]],
                            learning_rate=initial_lr,
                            validation_frac=.2,
-                           validation_interval=200,
+                           validation_interval=validation_interval,
                            check_function=checks,
                            gpus=gpus
                            )
@@ -652,3 +691,171 @@ def get_layer_output_grad(model, inputs, outputs, layer=-1):
     output_grad = f(x + y + sample_weight)
     return output_grad
 
+def tiffs_to_npy(tiff_folder,output_file):
+    # load file lists
+    raw_files = [1] * (len(os.listdir(tiff_folder)))
+    n = 0
+    for file in os.listdir(tiff_folder):
+
+        if file.endswith(".tiff"):
+            raw_files[n] = file
+            n += 1
+
+    raw_files = np.sort(raw_files)
+
+    sample_ar=np.asarray(tif.imread(tiff_folder + "/" + raw_files[0]))
+
+    numbers=len(raw_files)*np.shape(sample_ar)[0]*np.shape(sample_ar)[1]
+
+    bit_percision=16
+
+    memory=numbers*bit_percision/8/1000/1000/1000
+
+    print("array is %0.4f Gigabytes"%memory)
+
+    raw_tiff_array = np.empty((len(raw_files),np.shape(sample_ar)[0],np.shape(sample_ar)[1]),dtype=np.float16)
+
+    n = 0
+    for file in raw_files:
+        print(tiff_folder + "/" + file)
+        raw_tiff_array= np.append(raw_tiff_array,[np.asarray(tif.imread(tiff_folder + "/" + file), dtype=np.float32)],axis=0)
+        n += 1
+
+    raw_tiff_array = np.asarray(raw_tiff_array, dtype=np.float32)
+    raw_tiff_array = raw_tiff_array * (1 / 255)
+
+    np.save(output_file,raw_tiff_array)
+
+def save_tiffs_no_gt(seg,aff_vol,raw_vol,gt_vol=None):
+
+    print(np.shape(seg),np.shape(aff_vol),np.shape(raw_vol))
+
+    for i in range(0, np.shape(seg)[0]):
+        tif.imsave("predictions_tiffs/pred/pred%i.tiff" % i, np.asarray(seg[i], dtype=np.float32))  # ,photometric='rgb')
+        #tif.imsave("predictions_tiffs/gt/gt%i.tiff" % i, np.asarray(gt_vol[i], dtype=np.float32))
+        tif.imsave("predictions_tiffs/aff_graph0/0aff%i.tiff" % i, np.asarray(aff_vol[0, i], dtype=np.float32))
+        tif.imsave("predictions_tiffs/aff_graph1/1aff%i.tiff" % i, np.asarray(aff_vol[1, i], dtype=np.float32))
+        tif.imsave("predictions_tiffs/aff_graph2/2aff%i.tiff" % i, np.asarray(aff_vol[2, i], dtype=np.float32))
+        tif.imsave("predictions_tiffs/raw/raw%i" % i, np.asarray(raw_vol[i], dtype=np.float32))
+
+def grab_from_tiff_stack(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs"):
+
+    ###cords should be in form [[zstart,zstop],[xstart,xstop],[ystart,ystop]]
+    cords = np.asarray(cords)
+
+    # load file lists
+    raw_files = [1] * (len(os.listdir(tiff_folder)))
+    n = 0
+    for file in os.listdir(tiff_folder):
+
+        if file.endswith(".tiff"):
+            raw_files[n] = file
+            n += 1
+
+    raw_files = np.sort(raw_files)
+
+    sample_ar = np.asarray(tif.imread(tiff_folder + "/" + raw_files[0]))
+
+    numbers = (cords[0,1]-cords[0,0])*(cords[1,1]-cords[1,0])*(cords[2,1]-cords[2,0])
+
+    bit_percision = 32
+
+    memory = numbers * bit_percision / 8 / 1000 / 1000 / 1000
+
+    print("array is %0.4f Gigabytes\n" % memory)
+
+    raw_tiff_array = np.empty((cords[0,1]-cords[0,0],cords[1,1]-cords[1,0],cords[2,1]-cords[2,0]), dtype=np.float32)
+
+
+    for z in range(cords[0,0],cords[0,1]):
+        print("Block %i of %i"%(z-cords[0,0],cords[0,1]-cords[0,0]))
+        raw_tiff_array[z-cords[0,0]]=np.asarray(tif.imread(tiff_folder+"/"+raw_files[z]),dtype=np.float32)[cords[1,0]:cords[1,1],cords[2,0]:cords[2,1]]
+
+    return raw_tiff_array
+
+def process_block(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs",dump_folder="/media/user1/My4TBHD1/Dump",thresh=0.01,force_rebuild=0):
+
+    cords=np.asarray(cords)
+    identifier="_z_%i_%i_x_%i_%i_y_%i_%i"%(cords[0,0],cords[0,1],cords[1,0],cords[1,1],cords[2,0],cords[2,1])
+
+
+    if os.path.isfile(dump_folder+"/"+"raw"+identifier+".npy" and force_rebuild==0):
+
+        print("\nFound already built raw.\n")
+
+        raw_vol=np.load(dump_folder+"/"+"raw"+identifier+".npy")
+
+    else:
+
+        print("\nGrabbing raw from tiffs...\n")
+
+        raw_vol=grab_from_tiff_stack(cords,tiff_folder)
+
+        np.save(dump_folder + "/" + "raw" + identifier, raw_vol)
+
+        print("\nGot raw.\n")
+
+
+    ###ENSURE RAW IS NORMALIZED IN RANGE [0,1]
+    print("\nNormalizing raw array\n")
+    min=np.min(raw_vol)
+    max=np.max(raw_vol)
+    mean=np.mean(raw_vol)
+    print(max,min)
+    print(mean)
+    a=.235
+    b=.667
+
+    if max>1 or min>.1:
+        raw_vol=(raw_vol-min)/(max-min)
+        # in range [0,1]
+        # [0,1]->[a,b]
+        raw_vol=(raw_vol*(b-a))+a
+        #now in range a,b
+
+
+
+    if os.path.isfile(dump_folder+"/"+"aff"+identifier+".npy" and force_rebuild==0):
+
+        print("\nFound already built aff.\n")
+
+        aff_vol=np.load(dump_folder+"/"+"aff"+identifier+".npy")
+
+    else:
+
+        print("\nBuilding affinity block...\n")
+
+        aff_vol = assemble_block_with_model_location(best_model_func, best_model, raw_vol, 0.75, 1)
+
+        print("\nGot affinity block.\n")
+
+        np.save(dump_folder + "/" + "aff" + identifier, aff_vol)
+
+
+    if os.path.isfile(dump_folder+"/"+"seg"+identifier+".npy" and force_rebuild==0):
+
+        print("\nFound already built seg.\n")
+
+        seg=np.load(dump_folder+"/"+"seg"+identifier+".npy")
+
+        save_tiffs_no_gt(seg, aff_vol, raw_vol)
+
+
+    else:
+
+        print("\nBuilding segmentation...\n")
+
+        seg=watershed(aff_vol)
+
+        save_tiffs_no_gt(seg,aff_vol,raw_vol)
+
+        print("\nSegmentation built..\n")
+
+        np.save(dump_folder+"/"+"seg"+identifier,seg)
+
+
+
+
+
+
+    return seg

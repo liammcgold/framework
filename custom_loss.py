@@ -48,8 +48,6 @@ class loss(object):
 
 
 
-
-
     def malis(self,target,logits):
 
         return self.malis_object.malis(target,logits)
