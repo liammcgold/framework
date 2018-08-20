@@ -31,7 +31,7 @@ class process:
                  validation_interval=100,
                  image_loc=None,
                  conf_coordinates=None,
-                 check_function=None,gpus=1):
+                 check_function=None,gpus=1,random_contrast=False):
 
         #all volumes should be passed with shape "CZXY"
 
@@ -50,7 +50,7 @@ class process:
         self.__initialize_validation_set(validation_frac)
 
         #initialize provider that will give slices
-        self.provider=random_provider.provider(self.raw,self.aff,self.gt,self.input_shape[1:4])
+        self.provider=random_provider.provider(self.raw,self.aff,self.gt,self.input_shape[1:4],random_contrast=random_contrast)
 
         #initialize iteration and load file if necesary
         self.__initialize_iteration(pickup_iteration,pickup_file)
@@ -436,13 +436,14 @@ class process:
 
 
         #bzxyc
-        # if self.iteration%5==0:
-        #     print(std)
-        #     tifffile.imsave("training_tiffs/misc/raw",np.asarray(raw_in[0,8,:,:,0],dtype=np.float32))
-        #     tifffile.imsave("training_tiffs/misc/aff0",np.asarray(loss_info_in[0,8,:,:,0],dtype=np.float32))
-        #     tifffile.imsave("training_tiffs/misc/aff1",np.asarray(loss_info_in[0,8,:,:,1],dtype=np.float32))
-        #     tifffile.imsave("training_tiffs/misc/aff2",np.asarray(loss_info_in[0,8,:,:,2],dtype=np.float32))
-        #     tifffile.imsave("training_tiffs/misc/gt",np.asarray(loss_info_in[0,8,:,:,3],dtype=np.float32))
+        if self.iteration%5==0:
+            print(std)
+            tifffile.imsave("training_tiffs/misc/raw",np.asarray(raw_in[0,8,:,:,0],dtype=np.float32))
+            tifffile.imsave("training_tiffs/misc/raw2",np.asarray(raw_in[0,9,:,:,0],dtype=np.float32))
+            # tifffile.imsave("training_tiffs/misc/aff0",np.asarray(loss_info_in[0,8,:,:,0],dtype=np.float32))
+            # tifffile.imsave("training_tiffs/misc/aff1",np.asarray(loss_info_in[0,8,:,:,1],dtype=np.float32))
+            # tifffile.imsave("training_tiffs/misc/aff2",np.asarray(loss_info_in[0,8,:,:,2],dtype=np.float32))
+            # tifffile.imsave("training_tiffs/misc/gt",np.asarray(loss_info_in[0,8,:,:,3],dtype=np.float32))
 
         self.model.fit(raw_in, loss_info_in, epochs=1)
 

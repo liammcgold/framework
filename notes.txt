@@ -18,9 +18,29 @@
 -Right now I can not get the VCN bin 2 into the file type I need it to be in because it is so large, the tiffs are as 8 bits and numpy as min float16 so the size of that file would be ~700gb
 meaning without 700gb of ram I can not even create the numpy file
 -430,000 is go to model
+-Check new grountruth
+-Dont forget to crop edges on gt pred
+-log is assuming 0.75 overlap
+-Once new GT is prepared we could train multiple networks with annotated GT to find specific features
+
+
 
 
 
 ##################################
 #INPUT RAW MUST BE IN RANGE [0,1]#
 ##################################
+
+
+import numpy as np
+import helpers
+import random_provider
+import time
+provider=random_provider.provider(helpers.raw,helpers.aff,helpers.gt,(16,128,128),random_brightness=True,random_contrast=True)
+
+
+
+
+raw=provider.random_provider_raw()
+print(np.max(raw))
+print(np.min(raw))

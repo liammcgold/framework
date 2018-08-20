@@ -1,13 +1,18 @@
 import numpy as np
 
+from skimage import exposure
+
+import math
 
 class provider():
 
-    def __init__(self,raw,aff,gt,shape):
+    def __init__(self,raw,aff,gt,shape,random_contrast=False,random_factor=2):
         self.raw=raw
         self.aff=aff
         self.gt=gt
         self.shape=shape
+        self.random_contrast=random_contrast
+        self.random_factor=random_factor
 
         self.num_rots=self.number_of_rotations()
 
@@ -64,7 +69,7 @@ class provider():
 
         self.rotate()
 
-        return raw_out, aff_out
+        return self.augment(raw_out), aff_out
 
     def random_provider_affin_gt(self):
         affin=1
@@ -93,7 +98,7 @@ class provider():
 
         self.rotate()
 
-        return raw_out,aff_out, gt_out
+        return self.augment(raw_out),aff_out, gt_out
 
     def random_provider_loss_info(self):
 
@@ -114,7 +119,7 @@ class provider():
 
         self.rotate()
 
-        return raw_out, loss_info_out
+        return self.augment(raw_out), loss_info_out
 
     def random_provider_raw(self):
 
@@ -124,7 +129,7 @@ class provider():
 
         self.rotate()
 
-        return self.raw[x:x + self.shape[0], y:y + self.shape[1], z:z + self.shape[2]]
+        return self.augment(self.raw[x:x + self.shape[0], y:y + self.shape[1], z:z + self.shape[2]])
 
     def rotate(self):
         num=int(np.random.random()*self.num_rots)
@@ -138,6 +143,31 @@ class provider():
         self.aff = self.aff_rotations[0]
         self.gt = self.gt_rotations[0]
 
+    def augment(self,raw):
+
+        if self.random_contrast==True:
+            raw=self.__contrast_augment(raw)
+        return raw
+
+    def __contrast_augment(self,raw):
+
+        rand_min=np.random.normal(.22,1/6)
+
+        if rand_min<0:
+            rand_min=0
+        if rand_min>.5:
+            rand_min=0.5
+
+        rand_spread=np.random.normal(.4,1/6)
+
+        if rand_spread<.15:
+            rand_spread=0.15
+        if rand_spread>1:
+            rand_spread=1
+
+        raw=exposure.rescale_intensity(raw,out_range=(rand_min,rand_min+rand_spread))
+
+        return raw
 
 
 

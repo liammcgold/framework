@@ -12,6 +12,12 @@ import malis
 import filter
 import keras as k
 import models
+import log
+import time
+import psutil
+import warnings
+warnings.filterwarnings('ignore')
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 raw = np.load("data/spir_raw.npy")
@@ -21,13 +27,16 @@ aff = np.load("data/spir_aff.npy")
 gpus=1#input("how many GPUS")
 
 
-best_model="malis_heavy_net/model420000"
+best_model="malis_heavy_net/model500000"
 
 best_model_type="heavy paralell UNET"
 
 best_model_func=models.heavy_merged_u_net_make
 
 def assemble_block_with_model_location(model_funct, model_file, raw_vol, overlap, blend_fac):
+
+        time_b = time.time()
+        mem_b = psutil.virtual_memory().used
 
         print("\nGrabing model...\n")
 
@@ -61,6 +70,10 @@ def assemble_block_with_model_location(model_funct, model_file, raw_vol, overlap
         aff=builder.process()
 
         print("\nBlock building done.\n")
+
+        time_e = time.time()
+        mem_a = psutil.virtual_memory().used
+        log.log("assemble", np.shape(raw_vol), time_e - time_b, mem_a - mem_b)
 
         return aff
 
@@ -195,13 +208,23 @@ def watershed_on_vol_and_save_tiffs_single_thresh(aff_vol,gt_vol,thresh,thresh_h
 
 def watershed(aff_vol,thresh=0.1,thresh_high=0.9999,thresh_low=0.0001):
 
+    process = psutil.Process(os.getpid())
+    mem_b = psutil.virtual_memory().used
+
+
+    time_b = time.time()
 
     aff_vol = np.ascontiguousarray(aff_vol, dtype=np.float32)
 
-    seg = waterz.agglomerate(aff_vol, thresholds=[thresh],aff_threshold_high=thresh_high,aff_threshold_low=thresh_low,discretize_queue=10)
+    seg = waterz.agglomerate(aff_vol, thresholds=[thresh],aff_threshold_high=thresh_high,aff_threshold_low=thresh_low,discretize_queue=256)
 
     for segmentation in seg:
         seg=segmentation
+
+    time_e = time.time()
+    mem_a = psutil.virtual_memory().used
+
+    log.log("watershed", np.shape(seg), time_e - time_b, mem_a - mem_b)
 
     return seg
 
@@ -521,9 +544,11 @@ def run_process_with_checks_saved_model(iteration,
                                         saving_schedule=[[0, 100], [1000, 10000]],
                                         loss=None,
                                         image_interval=10,
-                                        gpus=1):
+                                        gpus=1,
+                                        random_contrast=False):
     if loss==None:
-        l0ss = custom_loss.loss()
+
+        loss = custom_loss.loss()
 
         weights = np.zeros((3, 2))
 
@@ -558,7 +583,8 @@ def run_process_with_checks_saved_model(iteration,
                            check_function=check_function,
                            pickup_file="malis_heavy_net/model%i"%iteration,
                            pickup_iteration=iteration,
-                           gpus=gpus
+                           gpus=gpus,
+                           random_contrast=random_contrast,
                            )
     try:
         flag = proc.train(500000)
@@ -740,6 +766,10 @@ def save_tiffs_no_gt(seg,aff_vol,raw_vol,gt_vol=None):
 
 def grab_from_tiff_stack(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs"):
 
+
+    time_b = time.time()
+    mem_b=psutil.virtual_memory().used
+
     ###cords should be in form [[zstart,zstop],[xstart,xstop],[ystart,ystop]]
     cords = np.asarray(cords)
 
@@ -754,15 +784,6 @@ def grab_from_tiff_stack(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs
 
     raw_files = np.sort(raw_files)
 
-    sample_ar = np.asarray(tif.imread(tiff_folder + "/" + raw_files[0]))
-
-    numbers = (cords[0,1]-cords[0,0])*(cords[1,1]-cords[1,0])*(cords[2,1]-cords[2,0])
-
-    bit_percision = 32
-
-    memory = numbers * bit_percision / 8 / 1000 / 1000 / 1000
-
-    print("array is %0.4f Gigabytes\n" % memory)
 
     raw_tiff_array = np.empty((cords[0,1]-cords[0,0],cords[1,1]-cords[1,0],cords[2,1]-cords[2,0]), dtype=np.float32)
 
@@ -771,15 +792,25 @@ def grab_from_tiff_stack(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs
         print("Block %i of %i"%(z-cords[0,0],cords[0,1]-cords[0,0]))
         raw_tiff_array[z-cords[0,0]]=np.asarray(tif.imread(tiff_folder+"/"+raw_files[z]),dtype=np.float32)[cords[1,0]:cords[1,1],cords[2,0]:cords[2,1]]
 
+    time_e = time.time()
+    mem_a = psutil.virtual_memory().used
+    log.log("loading", np.shape(raw_tiff_array), time_e - time_b, mem_a-mem_b)
+
     return raw_tiff_array
 
-def process_block(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs",dump_folder="/media/user1/My4TBHD1/Dump",thresh=0.01,force_rebuild=0):
+def process_block(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs",dump_folder="/media/user1/My4TBHD1/Dump",thresh=0.2,force_rebuild=[0,0,0]):
+
+
+    time_b = time.time()
+    mem_b = psutil.virtual_memory().used
+
+
 
     cords=np.asarray(cords)
     identifier="_z_%i_%i_x_%i_%i_y_%i_%i"%(cords[0,0],cords[0,1],cords[1,0],cords[1,1],cords[2,0],cords[2,1])
 
 
-    if os.path.isfile(dump_folder+"/"+"raw"+identifier+".npy" and force_rebuild==0):
+    if os.path.isfile(dump_folder+"/"+"raw"+identifier+".npy") and force_rebuild[0]==0:
 
         print("\nFound already built raw.\n")
 
@@ -789,8 +820,7 @@ def process_block(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs",dump_
 
         print("\nGrabbing raw from tiffs...\n")
 
-        raw_vol=grab_from_tiff_stack(cords,tiff_folder)
-
+        raw_vol = grab_from_tiff_stack(cords, tiff_folder)
         np.save(dump_folder + "/" + "raw" + identifier, raw_vol)
 
         print("\nGot raw.\n")
@@ -801,8 +831,6 @@ def process_block(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs",dump_
     min=np.min(raw_vol)
     max=np.max(raw_vol)
     mean=np.mean(raw_vol)
-    print(max,min)
-    print(mean)
     a=.235
     b=.667
 
@@ -815,7 +843,7 @@ def process_block(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs",dump_
 
 
 
-    if os.path.isfile(dump_folder+"/"+"aff"+identifier+".npy" and force_rebuild==0):
+    if os.path.isfile(dump_folder+"/"+"aff"+identifier+".npy") and force_rebuild[1]==0:
 
         print("\nFound already built aff.\n")
 
@@ -832,7 +860,7 @@ def process_block(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs",dump_
         np.save(dump_folder + "/" + "aff" + identifier, aff_vol)
 
 
-    if os.path.isfile(dump_folder+"/"+"seg"+identifier+".npy" and force_rebuild==0):
+    if os.path.isfile(dump_folder+"/"+"seg"+identifier+str(thresh)+".npy") and force_rebuild[2]==0:
 
         print("\nFound already built seg.\n")
 
@@ -845,15 +873,24 @@ def process_block(cords,tiff_folder="/media/user1/My4TBHD1/VCN_bin2_tiffs",dump_
 
         print("\nBuilding segmentation...\n")
 
-        seg=watershed(aff_vol)
+        seg = watershed(aff_vol[:,75:-75,75:-75,75:-75], thresh=thresh)
 
-        save_tiffs_no_gt(seg,aff_vol,raw_vol)
+
+        seg=filter.top_n(seg,255)
+
+
+        save_tiffs_no_gt(seg,aff_vol[:,75:-75,75:-75,75:-75],raw_vol[75:-75,75:-75,75:-75])
 
         print("\nSegmentation built..\n")
 
-        np.save(dump_folder+"/"+"seg"+identifier,seg)
+        np.save(dump_folder+"/"+"seg"+identifier+str(thresh),seg)
+
+    time_e = time.time()
+    process = psutil.Process(os.getpid())
+    mem_a=process.memory_full_info().rss
 
 
+    log.log("process", np.shape(raw_vol), time_e - time_b, mem_a)
 
 
 

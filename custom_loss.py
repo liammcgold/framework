@@ -45,9 +45,6 @@ class loss(object):
 
         return tensorlayer.cost.dice_coe(logits,target[:,:,:,:,0:3])
 
-
-
-
     def malis(self,target,logits):
 
         return self.malis_object.malis(target,logits)
